@@ -80,26 +80,6 @@ export class Game {
         return this.log;
     }
 
-    public async start(): Promise<GameLog> {
-        this.log = { err: false, msg: "" };
-        try {
-            this.monster.setData(await this.monster.init());
-        } catch (err) {
-            this.log.err = true;
-            this.log.msg = "ERROR! Server Can't init monster\n" + err;
-            console.log(this.log);
-            return this.log;
-        }
-        if (this.monster.getData()?.id) {
-            console.log(`怪物 ${this.monster.getData().name},血量:${this.monster.getData().hp} \n`);
-        } else {
-            await this.monster.respawn().catch((err) => {
-                console.log(err);
-            });
-        }
-        return this.log;
-    }
-
     public play(name: string, socket: Net.Socket) {
         const player = this.players.get(name);
 
@@ -132,7 +112,7 @@ export class Game {
                 console.log("Error!Server can't updateFeather\n" + err);
             });
 
-            const output = {
+            const output: R = {
                 type: "fightLog",
                 body: "",
                 isGameOver: true,

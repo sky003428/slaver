@@ -14,6 +14,10 @@ const game = new game_1.Game();
         return;
     }
 })();
+const master = net_1.default.createConnection({ host: HOST, port: 3000 }, () => {
+    console.log("Master connected", master.remotePort);
+    master.on("data", (data) => { });
+});
 const server = net_1.default.createServer((socket) => {
     socket.setNoDelay(true);
     console.log("client connected", socket.remotePort, "id");
@@ -30,23 +34,22 @@ const server = net_1.default.createServer((socket) => {
                 if (log.err) {
                     return;
                 }
-                game.play(input.body, socket);
+                // game.play(input.body, socket);
             })();
         }
-        if (input.type == "res") {
-            const pattarn = /^Y/im;
-            const answer = pattarn.test(input.body);
-            if (!answer) {
-                socket.end(JSON.stringify({ type: "msg", body: "bye" }));
-                return;
-            }
-            if (game.monster.getData().hp > 0) {
-                game.play(input.name, socket);
-            }
-            else {
-                game.playingPlayers.set(input.name, game.players.get(input.name));
-            }
-        }
+        // if (input.type == "res") {
+        //     const pattarn = /^Y/im;
+        //     const answer: boolean = pattarn.test(input.body);
+        //     if (!answer) {
+        //         socket.end(JSON.stringify({ type: "msg", body: "bye" }));
+        //         return;
+        //     }
+        //     if (game.monster.getData().hp > 0) {
+        //         game.play(input.name, socket);
+        //     } else {
+        //         game.playingPlayers.set(input.name, game.players.get(input.name));
+        //     }
+        // }
         if (input.type == "fight") {
             game.play(input.body, socket);
         }

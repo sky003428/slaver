@@ -1,16 +1,29 @@
 import "dotenv/config";
 import Net from "net";
-import { Game, GameLog } from "./game";
+import { Game, GameLog, R } from "./game";
+import { M } from "./monster";
 
 const { HOST, PORT } = process.env;
 const game: Game = new Game();
 
-(async () => {
-    const log: GameLog = await game.start();
-    if (log.err) {
-        return;
-    }
-})();
+const master: Net.Socket = Net.createConnection({ host: HOST, port: 3000 }, () => {
+    console.log("Master connected", master.remotePort);
+    const op: R = {
+        type: "fetch",
+        body: "monster",
+    };
+    // master.write();
+    master.on("data", (data: Buffer) => {
+        let d: M | string;
+        try {
+            d = JSON.parse(data.toString());
+        } catch (err) {
+            console.log(err);
+            return;
+        }
+        console.log(d);
+    });
+});
 
 const server: Net.Server = Net.createServer((socket: Net.Socket): void => {
     socket.setNoDelay(true);
@@ -32,24 +45,27 @@ const server: Net.Server = Net.createServer((socket: Net.Socket): void => {
                 if (log.err) {
                     return;
                 }
-                game.play(input.body, socket);
+
+                // game.play(input.body, socket);
             })();
         }
-        if (input.type == "res") {
-            const pattarn = /^Y/im;
-            const answer: boolean = pattarn.test(input.body);
 
-            if (!answer) {
-                socket.end(JSON.stringify({ type: "msg", body: "bye" }));
-                return;
-            }
+        // if (input.type == "res") {
+        //     const pattarn = /^Y/im;
+        //     const answer: boolean = pattarn.test(input.body);
 
-            if (game.monster.getData().hp > 0) {
-                game.play(input.name, socket);
-            } else {
-                game.playingPlayers.set(input.name, game.players.get(input.name));
-            }
-        }
+        //     if (!answer) {
+        //         socket.end(JSON.stringify({ type: "msg", body: "bye" }));
+        //         return;
+        //     }
+
+        //     if (game.monster.getData().hp > 0) {
+        //         game.play(input.name, socket);
+        //     } else {
+        //         game.playingPlayers.set(input.name, game.players.get(input.name));
+        //     }
+        // }
+
         if (input.type == "fight") {
             game.play(input.body, socket);
         }
