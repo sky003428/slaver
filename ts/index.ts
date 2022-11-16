@@ -1,27 +1,34 @@
 import "dotenv/config";
 import Net from "net";
 import { Game, GameLog, R } from "./game";
-import { M } from "./monster";
+import { Monster } from "./monster";
 
 const { HOST, PORT } = process.env;
 const game: Game = new Game();
 
 const master: Net.Socket = Net.createConnection({ host: HOST, port: 3000 }, () => {
     console.log("Master connected", master.remotePort);
-    const op: R = {
-        type: "fetch",
-        body: "monster",
-    };
-    // master.write();
-    master.on("data", (data: Buffer) => {
-        let d: M | string;
+    Monster.fetch(master, PORT);
+
+    master.on("data", (dataBuffer: Buffer) => {
+        const dataArr: string[] = dataBuffer.toString().replace(/}{/g, "}}{{").split(/}{/g);
         try {
-            d = JSON.parse(data.toString());
+            const dArr: R[] = dataArr.map((d: string) => JSON.parse(d));
+            console.log("master: ", dataBuffer.toString());
+
+            for (let d of dArr) {
+                if (d.type == "sync" && d.target == "monster") {
+                    game.monster.setData(JSON.parse(d.body));
+                    return;
+                }
+
+                const socket: Net.Socket = game.players.get(d.name);
+                socket.write(JSON.stringify(d));
+            }
         } catch (err) {
-            console.log(err);
+            console.log(dataArr, "Decode error", err);
             return;
         }
-        console.log(d);
     });
 });
 
@@ -29,56 +36,50 @@ const server: Net.Server = Net.createServer((socket: Net.Socket): void => {
     socket.setNoDelay(true);
     console.log("client connected", socket.remotePort, "id");
 
-    socket.on("data", (data: Buffer): void => {
-        console.log(data.toString());
+    socket.on("data", (dataBuffer: Buffer): void => {
+        console.log("get", dataBuffer.toString());
+        const dataArr: string[] = dataBuffer.toString().replace(/}{/g, "}}{{").split(/}{/g);
 
-        let log: GameLog = game.isValid(data.toString(), socket);
-        if (log.err) {
-            return;
-        }
+        dataArr.forEach((d) => {
+            let log: GameLog = game.isValid(d, socket);
+            if (log.err) {
+                return;
+            }
 
-        const input = log.data;
+            const input = log.data;
 
-        if (input.type == "login") {
-            (async () => {
-                log = await game.login(input.body, socket);
-                if (log.err) {
-                    return;
+            if (input.type == "login") {
+                master.write(JSON.stringify(input));
+                // master.write(JSON.stringify({ type: "fetch", body: "", name: input.name, target: "player" }));
+                game.login(input.name, socket);
+                return;
+            }
+            if (input.type == "fight") {
+                game.canPlay(input.name, socket) && master.write(JSON.stringify(input));
+                return;
+            }
+            if (input.type == "res") {
+                if (/^Y/im.test(input.body)) {
+                    master.write(JSON.stringify(input));
+                } else {
+                    master.write(JSON.stringify({ type: "logout", body: "", name: input.name }));
+                    game.logOut(socket.remotePort);
+                    socket.end(JSON.stringify({ type: "msg", body: "bye", name: input.name }));
                 }
-
-                // game.play(input.body, socket);
-            })();
-        }
-
-        // if (input.type == "res") {
-        //     const pattarn = /^Y/im;
-        //     const answer: boolean = pattarn.test(input.body);
-
-        //     if (!answer) {
-        //         socket.end(JSON.stringify({ type: "msg", body: "bye" }));
-        //         return;
-        //     }
-
-        //     if (game.monster.getData().hp > 0) {
-        //         game.play(input.name, socket);
-        //     } else {
-        //         game.playingPlayers.set(input.name, game.players.get(input.name));
-        //     }
-        // }
-
-        if (input.type == "fight") {
-            game.play(input.body, socket);
-        }
+            }
+        });
     });
 
     socket.on("error", () => {
         console.log(socket.remotePort, "Abnormal disconnect");
-        game.logOut(socket.remotePort);
+        const name = game.logOut(socket.remotePort);
+        master.write(JSON.stringify({ type: "logout", body: "", name }));
     });
 
     socket.on("close", () => {
         console.log(socket.remotePort, "has disconnected");
-        game.logOut(socket.remotePort);
+        const name = game.logOut(socket.remotePort);
+        name && master.write(JSON.stringify({ type: "logout", body: "", name }));
     });
 });
 
